@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="ca">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comparador d’immobles de Catalunya</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+:root{--ink:#1d2b34;--mute:#58666e;--bg:#f3f5f1;--card:#fff;--line:#d3dad4;--acc:#0e6674;--accbg:#e1f0f1;--warn:#9a5b0c;--warnbg:#fbf0dc}
+@media (prefers-color-scheme:dark){:root{--ink:#e6ece9;--mute:#9db0b6;--bg:#12191d;--card:#1a2328;--line:#2c3a41;--acc:#5cc2d0;--accbg:#18353a;--warn:#e8b25c;--warnbg:#3a2d14}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:2.2rem 1.2rem 1.4rem;max-width:1100px;margin:auto}
+h1{font-size:clamp(1.8rem,4vw,2.6rem);line-height:1.1;margin:0 0 .5rem;letter-spacing:-.02em}
+header p{margin:0;max-width:60ch;color:var(--mute)}
+main{max-width:1100px;margin:auto;padding:0 1.2rem 3rem;display:grid;gap:1.2rem;grid-template-columns:minmax(0,1fr)}
+@media(min-width:900px){main{grid-template-columns:minmax(0,5fr) minmax(0,6fr)}}
+section{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:1.1rem}
+h2{font-size:1.1rem;margin:0 0 .7rem}
+label{display:block;font-size:.85rem;color:var(--mute);margin-bottom:.2rem}
+input,select,textarea,button{font:inherit;color:inherit}
+input,select,textarea{width:100%;padding:.5rem .6rem;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+textarea{min-height:90px;resize:vertical}
+.grid{display:grid;gap:.7rem;grid-template-columns:repeat(2,minmax(0,1fr))}
+.full{grid-column:1/-1}
+button{background:var(--acc);color:var(--bg);border:0;border-radius:6px;padding:.6rem 1rem;cursor:pointer;font-weight:600}
+button.sec{background:var(--accbg);color:var(--acc)}
+.row{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.7rem}
+.note{font-size:.85rem;color:var(--mute);margin:.5rem 0 0}
+.warn{background:var(--warnbg);color:var(--warn);border-radius:6px;padding:.5rem .7rem;font-size:.85rem;margin-top:.7rem}
+#map{height:360px;border-radius:8px;border:1px solid var(--line);z-index:0}
+table{width:100%;border-collapse:collapse;font-size:.95rem}
+td{padding:.35rem 0;border-bottom:1px solid var(--line)}
+td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+tr.tot td{font-weight:700;border-bottom:0;padding-top:.6rem}
+.big{font-size:1.8rem;font-weight:700;letter-spacing:-.02em}
+.dot{display:inline-block;width:.7rem;height:.7rem;border-radius:50%;margin-right:.45rem}
+.chk{display:flex;gap:.5rem;align-items:center;margin-top:.2rem}.chk input{width:auto}
+footer{max-width:1100px;margin:auto;padding:0 1.2rem 2rem;font-size:.8rem;color:var(--mute)}
+a{color:var(--acc)}
+</style>
+</head>
+<body>
+<header>
+<h1>Comparador d’immobles de Catalunya</h1>
+<p>Enganxa l’enllaç d’un anunci i copia’n el text: veuràs què hi ha al voltant, quant costa de debò comprar-lo i quines ajudes fiscals s’hi poden aplicar.</p>
+</header>
+<main>
+<div>
+<section>
+<h2>L’anunci</h2>
+<label for="url">Enllaç de l’anunci</label>
+<input id="url" type="url" placeholder="https://www.idealista.com/inmueble/…">
+<label for="txt" style="margin-top:.7rem">Text de l’anunci (preu, metres, habitacions, adreça…)</label>
+<textarea id="txt" placeholder="Copia i enganxa aquí el text de l’anunci"></textarea>
+<div class="row"><button id="fill" type="button">Omple les dades</button><a id="open" href="#" target="_blank" rel="noopener" hidden>Obre l’anunci</a></div>
+<p class="note">La web no llegeix la pàgina de l’anunci: només treballa amb el text que enganxes.</p>
+<div class="grid" style="margin-top:.9rem">
+<div><label for="tipus">Tipus d’immoble</label><select id="tipus"><option value="habitatge">Pis o casa</option><option value="altres">Garatge o traster</option><option value="terreny">Terreny</option></select></div>
+<div><label for="estat">Estat</label><select id="estat"><option value="segona">Segona mà</option><option value="nova">Obra nova</option></select></div>
+<div><label for="preu">Preu (€)</label><input id="preu" type="number" min="0" step="1000"></div>
+<div><label for="m2">Superfície (m²)</label><input id="m2" type="number" min="0"></div>
+<div><label for="hab">Habitacions</label><input id="hab" type="number" min="0"></div>
+<div><label for="banys">Banys</label><input id="banys" type="number" min="0"></div>
+<div><label for="planta">Planta</label><select id="planta"><option value="">—</option><option>Planta baixa</option><option>Planta intermèdia</option><option>Planta superior</option></select></div>
+<div><label for="asc">Ascensor</label><select id="asc"><option value="">—</option><option>Sí</option><option>No</option></select></div>
+<div class="full"><label for="adr">Adreça o població</label><input id="adr" placeholder="Carrer, número, població"></div>
+</div>
+<div class="row"><button id="go" type="button">Analitza</button></div>
+<p id="msg" class="note" role="status"></p>
+</section>
+
+<section style="margin-top:1.2rem">
+<h2>Cost de compra</h2>
+<div class="grid">
+<div><label for="fin">Finançament (%)</label><input id="fin" type="number" value="80" min="0" max="100"></div>
+<div><label for="int">Interès anual (%)</label><input id="int" type="number" value="3" step="0.1" min="0"></div>
+<div><label for="anys">Anys</label><input id="anys" type="number" value="30" min="1" max="40"></div>
+<div><label for="gast">Despeses de compravenda (%)</label><input id="gast" type="number" value="1.5" step="0.1" min="0"></div>
+<div><label for="edat">Edat del comprador</label><input id="edat" type="number" value="30" min="18"></div>
+<div><label for="com">Comunitat (€/mes)</label><input id="com" type="number" value="0" min="0"></div>
+<div><label for="ibi">IBI (€/any)</label><input id="ibi" type="number" value="0" min="0"></div>
+<div><label for="seg">Assegurança (€/any)</label><input id="seg" type="number" value="0" min="0"></div>
+<div class="full"><div class="chk"><input id="hab1" type="checkbox" checked><label for="hab1" style="margin:0">Serà l’habitatge habitual</label></div>
+<div class="chk"><input id="rend" type="checkbox" checked><label for="rend" style="margin:0">Compleixo el límit de renda per a l’ajuda</label></div></div>
+</div>
+<table style="margin-top:.8rem" id="cost"></table>
+<div class="warn">Els tipus fiscals i els requisits de les ajudes canvien sovint i les fonts consultades no coincideixen del tot (edat màxima dels joves, trams per a preus alts). Comprova’ls a l’Agència Tributària de Catalunya abans de decidir res.</div>
+</section>
+</div>
+
+<div>
+<section>
+<h2>Preu per m²</h2>
+<div class="big" id="ppm">—</div>
+<p class="note" id="ppmn">Introdueix preu i superfície. La comparació amb Idescat i el municipi arribarà en una propera fase.</p>
+</section>
+<section style="margin-top:1.2rem">
+<h2>Entorn (600 m)</h2>
+<div id="map"></div>
+<table id="serv" style="margin-top:.7rem"></table>
+<p class="note">Dades d’OpenStreetMap; poden estar incompletes. La inundabilitat (ACA) s’afegirà en una propera fase.</p>
+</section>
+</div>
+</main>
+<footer>Orientatiu: no és una taxació ni assessorament fiscal o financer. Mapa i serveis © col·laboradors d’<a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+/* Tipus fiscals: PENDENTS DE VERIFICAR. Edita aquí quan es confirmin. */
+const CFG={
+  itpTrams:[[0,.10],[600000,.11],[900000,.12],[1500000,.13]], // [des de €, tipus] progressiu
+  itpJove:.05, edatJove:35,
+  ajd:.015, ivaHab:.10, ivaAltres:.21,
+  radi:600
+};
+const $=id=>document.getElementById(id);
+const eur=n=>new Intl.NumberFormat("ca-ES",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(n);
+const num=id=>parseFloat($(id).value)||0;
+let map,layer;
+
+function parseAd(){
+  const t=$("txt").value, u=$("url").value.trim();
+  if(u){const a=$("open");a.href=u;a.hidden=false;}
+  const g=(re)=>{const m=t.match(re);return m?m:null};
+  let m=g(/(\d{1,3}(?:[.\s]\d{3})+|\d{4,})\s*€/);
+  if(m)$("preu").value=m[1].replace(/[.\s]/g,"");
+  m=g(/(\d{2,4})\s*(?:m²|m2|metres)/i); if(m)$("m2").value=m[1];
+  m=g(/(\d+)\s*(?:hab|dorm|habitaci)/i); if(m)$("hab").value=m[1];
+  m=g(/(\d+)\s*(?:bany|baño)/i); if(m)$("banys").value=m[1];
+  if(/planta baixa|bajo|baixos|entresol/i.test(t))$("planta").value="Planta baixa";
+  else if(/(?:[5-9]|\d{2})\s*[ªa]?\s*planta|planta\s*(?:[5-9]|\d{2})|[áa]tico|[àa]tic/i.test(t))$("planta").value="Planta superior";
+  else if(/planta|\d\s*[ªa]\s*planta/i.test(t))$("planta").value="Planta intermèdia";
+  if(/sense ascensor|sin ascensor/i.test(t))$("asc").value="No";
+  else if(/ascensor/i.test(t))$("asc").value="Sí";
+  if(/obra nova|obra nueva|nova construcci/i.test(t))$("estat").value="nova";
+  if(/garatge|garaje|plaza de aparcamiento/i.test(t)&&!/pis|piso|casa/i.test(t))$("tipus").value="altres";
+  if(/terreny|terreno|parcel/i.test(t))$("tipus").value="terreny";
+  m=g(/(?:en venta en|a la venda a|en venda a)\s+([^\n]+)/i); if(m&&!$("adr").value)$("adr").value=m[1].trim();
+  $("msg").textContent="Dades omplertes. Revisa-les i corregeix el que calgui.";
+  render();
+}
+
+function itp(preu){
+  let q=0;const t=CFG.itpTrams;
+  for(let i=0;i<t.length;i++){const lo=t[i][0],hi=i+1<t.length?t[i+1][0]:Infinity;
+    if(preu>lo)q+=(Math.min(preu,hi)-lo)*t[i][1];}
+  return q;
+}
+function render(){
+  const p=num("preu"),m2=num("m2");
+  if(p&&m2){$("ppm").textContent=eur(p/m2)+"/m²";}
+  else $("ppm").textContent="—";
+  const tipus=$("tipus").value,nova=$("estat").value==="nova";
+  const fin=p*num("fin")/100,r=num("int")/1200,n=num("anys")*12;
+  const quota=!fin?0:(r?fin*r/(1-Math.pow(1+r,-n)):fin/n);
+  let imp=0,etq="";
+  if(nova){
+    const iva=tipus==="habitatge"?CFG.ivaHab:CFG.ivaAltres;
+    imp=p*(iva+CFG.ajd);etq=`IVA ${iva*100}% + AJD ${CFG.ajd*100}%`;
+  }else{
+    const jove=tipus==="habitatge"&&$("hab1").checked&&$("rend").checked&&num("edat")<=CFG.edatJove;
+    if(jove){imp=p*CFG.itpJove;etq=`ITP reduït ${CFG.itpJove*100}% (jove)`;}
+    else{imp=itp(p);etq=`ITP general (${p?(imp/p*100).toFixed(1):0}% de mitjana)`;}
+  }
+  const gast=p*num("gast")/100,entrada=p-fin+imp+gast;
+  const rec=(num("com")+num("ibi")/12+num("seg")/12);
+  const rows=[["Preu",p],["Entrada (preu − finançament)",p-fin],[etq,imp],["Despeses de compravenda",gast]];
+  $("cost").innerHTML=rows.map(r=>`<tr><td>${r[0]}</td><td>${eur(r[1])}</td></tr>`).join("")+
+    `<tr class="tot"><td>Diners necessaris per comprar</td><td>${eur(entrada)}</td></tr>`+
+    `<tr><td>Quota mensual d’hipoteca</td><td>${eur(quota)}</td></tr>`+
+    `<tr><td>Despeses mensuals (comunitat, IBI, assegurança)</td><td>${eur(rec)}</td></tr>`+
+    `<tr class="tot"><td>Cost mensual total</td><td>${eur(quota+rec)}</td></tr>`;
+}
+
+const CATS=[
+ {k:"Escoles i llars d’infants",c:"#c98a1b",t:x=>["school","kindergarten"].includes(x.amenity)},
+ {k:"Farmàcies",c:"#2a9d5c",t:x=>x.amenity==="pharmacy"},
+ {k:"Supermercats i botigues",c:"#d1495b",t:x=>["supermarket","convenience"].includes(x.shop)},
+ {k:"Transport públic",c:"#3d6fd1",t:x=>x.highway==="bus_stop"||["station","tram_stop","halt"].includes(x.railway)},
+ {k:"Sanitat",c:"#8a4fd1",t:x=>["clinic","hospital","doctors"].includes(x.amenity)},
+ {k:"Parcs",c:"#4c9a2a",t:x=>x.leisure==="park"}
+];
+function dist(a,b,c,d){const R=6371000,f=Math.PI/180,dl=(c-a)*f,dn=(d-b)*f;
+ const h=Math.sin(dl/2)**2+Math.cos(a*f)*Math.cos(c*f)*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(h));}
+
+async function analyse(){
+  const q=$("adr").value.trim();
+  if(!q){$("msg").textContent="Escriu l’adreça o la població per veure l’entorn.";return;}
+  $("msg").textContent="Cercant l’adreça…";
+  try{
+    const r=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=es&q="+encodeURIComponent(q+", Catalunya"));
+    const j=await r.json();
+    if(!j.length){$("msg").textContent="No trobem aquesta adreça. Prova amb carrer i població.";return;}
+    const lat=+j[0].lat,lon=+j[0].lon;
+    if(!map){map=L.map("map");L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(map);layer=L.layerGroup().addTo(map);}
+    layer.clearLayers();map.setView([lat,lon],16);
+    L.marker([lat,lon]).addTo(layer).bindPopup("Immoble");
+    L.circle([lat,lon],{radius:CFG.radi,weight:1,dashArray:"4",fill:false}).addTo(layer);
+    $("msg").textContent="Carregant serveis del voltant…";
+    const a=`(around:${CFG.radi},${lat},${lon})`;
+    const body="data="+encodeURIComponent(`[out:json][timeout:25];(nwr${a}[amenity~"^(school|kindergarten|pharmacy|clinic|hospital|doctors)$"];nwr${a}[shop~"^(supermarket|convenience)$"];nwr${a}[highway=bus_stop];nwr${a}[railway~"^(station|tram_stop|halt)$"];nwr${a}[leisure=park];);out center tags;`);
+    const o=await fetch("https://overpass-api.de/api/interpreter",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body});
+    const d=await o.json();
+    const res=CATS.map(c=>({c,items:[]}));
+    d.elements.forEach(e=>{const y=e.lat??e.center?.lat,x=e.lon??e.center?.lon;if(y==null)return;
+      const tg=e.tags||{};res.forEach(g=>{if(g.c.t(tg)){g.items.push(dist(lat,lon,y,x));
+        L.circleMarker([y,x],{radius:5,color:g.c.c,fillOpacity:.8}).addTo(layer).bindPopup((tg.name||g.c.k));}});});
+    $("serv").innerHTML=res.map(g=>{const n=g.items.length,mn=n?Math.round(Math.min(...g.items)):null;
+      return `<tr><td><span class="dot" style="background:${g.c.c}"></span>${g.c.k}</td><td>${n?n+" · més a prop a "+mn+" m":"cap"}</td></tr>`}).join("");
+    $("msg").textContent="Anàlisi feta.";
+  }catch(e){$("msg").textContent="No s’ha pogut carregar el mapa o els serveis. Torna-ho a provar d’aquí una estona.";}
+}
+$("fill").onclick=parseAd;$("go").onclick=()=>{render();analyse();};
+document.querySelectorAll("input,select").forEach(e=>e.addEventListener("input",render));
+render();
+</script>
+</body>
+</html>
