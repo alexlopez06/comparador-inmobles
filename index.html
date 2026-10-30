@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="ca">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comparador d’immobles de Catalunya</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+:root{--ink:#1d2b34;--mute:#58666e;--bg:#f3f5f1;--card:#fff;--line:#d3dad4;--acc:#0e6674;--accbg:#e1f0f1;--warn:#9a5b0c;--warnbg:#fbf0dc}
+@media (prefers-color-scheme:dark){:root{--ink:#e6ece9;--mute:#9db0b6;--bg:#12191d;--card:#1a2328;--line:#2c3a41;--acc:#5cc2d0;--accbg:#18353a;--warn:#e8b25c;--warnbg:#3a2d14}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:2.2rem 1.2rem 1.4rem;max-width:1100px;margin:auto}
+h1{font-size:clamp(1.8rem,4vw,2.6rem);line-height:1.1;margin:0 0 .5rem;letter-spacing:-.02em}
+header p{margin:0;max-width:60ch;color:var(--mute)}
+main{max-width:1100px;margin:auto;padding:0 1.2rem 3rem;display:grid;gap:1.2rem;grid-template-columns:minmax(0,1fr)}
+@media(min-width:900px){main{grid-template-columns:minmax(0,5fr) minmax(0,6fr)}}
+section{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:1.1rem}
+h2{font-size:1.1rem;margin:0 0 .7rem}
+label{display:block;font-size:.85rem;color:var(--mute);margin-bottom:.2rem}
+input,select,textarea,button{font:inherit;color:inherit}
+input,select,textarea{width:100%;padding:.5rem .6rem;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+textarea{min-height:90px;resize:vertical}
+.grid{display:grid;gap:.7rem;grid-template-columns:repeat(2,minmax(0,1fr))}
+.full{grid-column:1/-1}
+button{background:var(--acc);color:var(--bg);border:0;border-radius:6px;padding:.6rem 1rem;cursor:pointer;font-weight:600}
+button.sec{background:var(--accbg);color:var(--acc)}
+.row{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.7rem}
+.note{font-size:.85rem;color:var(--mute);margin:.5rem 0 0}
+.warn{background:var(--warnbg);color:var(--warn);border-radius:6px;padding:.5rem .7rem;font-size:.85rem;margin-top:.7rem}
+#map{height:360px;border-radius:8px;border:1px solid var(--line);z-index:0}
+table{width:100%;border-collapse:collapse;font-size:.95rem}
+td{padding:.35rem 0;border-bottom:1px solid var(--line)}
+td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+tr.tot td{font-weight:700;border-bottom:0;padding-top:.6rem}
+.big{font-size:1.8rem;font-weight:700;letter-spacing:-.02em}
+.dot{display:inline-block;width:.7rem;height:.7rem;border-radius:50%;margin-right:.45rem}
+.chk{display:flex;gap:.5rem;align-items:center;margin-top:.2rem}.chk input{width:auto}
+h3{font-size:.95rem;margin:1.1rem 0 .4rem}
+#gal{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.6rem}#gal img{height:80px;border-radius:6px;border:1px solid var(--line)}
+button.sec[data-i]{padding:.1rem .5rem;margin-left:.4rem}
+th{font-weight:600;font-size:.85rem;text-align:right;color:var(--mute)}
+.z td~td,.z th~th{text-align:right;padding-left:.6rem}.z small{color:var(--mute)}
+.elig{white-space:pre-line;font-size:.85rem;color:var(--mute);margin:.2rem 0 .5rem}
+footer{max-width:1100px;margin:auto;padding:0 1.2rem 2rem;font-size:.8rem;color:var(--mute)}
+a{color:var(--acc)}
+</style>
+</head>
+<body>
+<header>
+<h1>Comparador d’immobles de Catalunya</h1>
+<p>Enganxa l’enllaç d’un anunci i copia’n el text: veuràs què hi ha al voltant, quant costa de debò comprar-lo i quines ajudes fiscals s’hi poden aplicar.</p>
+</header>
+<main>
+<div>
+<section>
+<h2>L’anunci</h2>
+<label for="url">Enllaç de l’anunci</label>
+<input id="url" type="url" placeholder="https://www.idealista.com/inmueble/…">
+<label for="txt" style="margin-top:.7rem">Text de l’anunci (preu, metres, habitacions, adreça…)</label>
+<textarea id="txt" placeholder="Copia i enganxa aquí el text de l’anunci"></textarea>
+<div class="row"><button id="fill" type="button">Omple les dades</button><a id="open" href="#" target="_blank" rel="noopener" hidden>Obre l’anunci</a></div>
+<p class="note">La web no llegeix la pàgina de l’anunci: només treballa amb el text que enganxes.</p>
+<div class="grid" style="margin-top:.9rem">
+<div><label for="tipus">Tipus d’immoble</label><select id="tipus"><option value="habitatge">Pis o casa</option><option value="altres">Garatge o traster</option><option value="terreny">Terreny</option></select></div>
+<div><label for="estat">Estat</label><select id="estat"><option value="segona">Segona mà</option><option value="nova">Obra nova</option></select></div>
+<div><label for="preu">Preu (€)</label><input id="preu" type="number" min="0" step="1000"></div>
+<div><label for="m2">Superfície (m²)</label><input id="m2" type="number" min="0"></div>
+<div><label for="hab">Habitacions</label><input id="hab" type="number" min="0"></div>
+<div><label for="banys">Banys</label><input id="banys" type="number" min="0"></div>
+<div><label for="planta">Planta</label><select id="planta"><option value="">—</option><option>Planta baixa</option><option>Planta intermèdia</option><option>Planta superior</option></select></div>
+<div><label for="asc">Ascensor</label><select id="asc"><option value="">—</option><option>Sí</option><option>No</option></select></div>
+<div><label for="cert">Certificat energètic</label><select id="cert"><option value="">—</option><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option><option>F</option><option>G</option><option>En tràmit</option><option>Exempt</option></select></div>
+<div style="align-self:end"><p class="note" id="certn" style="margin:0"></p></div>
+<div><label for="any">Any de construcció</label><input id="any" type="number" min="1800" max="2100"></div>
+<div><label for="balc">Balcó o terrassa</label><select id="balc"><option value="">—</option><option>Sí</option><option>No</option></select></div>
+<div><label for="ac">Aire condicionat</label><select id="ac"><option value="">—</option><option>Sí</option><option>No</option></select></div>
+<div><label for="cal">Calefacció</label><select id="cal"><option value="">—</option><option>Sí</option><option>No</option></select></div>
+<div><label for="gar">Garatge</label><select id="gar"><option value="">—</option><option>Sí</option><option>No</option></select></div>
+<div><label for="tra">Traster</label><select id="tra"><option value="">—</option><option>Sí</option><option>No</option></select></div>
+<div><label for="cons">Conservació</label><select id="cons"><option value="">—</option><option>Obra nova</option><option>Bon estat</option><option>A reformar</option></select></div>
+<div><label for="sit">Situació de l’immoble</label><select id="sit"><option value="">—</option><option>Disponible (lliure)</option><option>Ocupat</option><option>Llogat (amb inquilins)</option><option>Nua propietat</option><option>De banc</option></select></div>
+<div class="full"><label for="adr">Adreça o població</label><input id="adr" placeholder="Carrer, número, població"></div>
+<div class="full"><label for="imgs">Imatges i plànols de l’anunci</label><input id="imgs" type="file" accept="image/*" multiple><div id="gal"></div><p class="note">Només es veuen al teu navegador. També pots enganxar-hi imatges copiades (Ctrl+V). Clica una imatge per ampliar-la.</p></div>
+</div>
+<div class="row"><button id="go" type="button">Analitza</button></div>
+<p id="msg" class="note" role="status"></p>
+</section>
+
+<section style="margin-top:1.2rem">
+<h2>Cost de compra</h2>
+<p class="note" style="margin-top:0">El càlcul parteix de les dades de l’anunci i s’actualitza sol.</p>
+<h3>1. Impostos i despeses</h3>
+<div class="row" style="margin:0 0 .6rem;align-items:center"><span class="note" style="margin:0">Veure també amb una oferta:</span><button class="sec" type="button" data-d="0">Sense</button><button class="sec" type="button" data-d="5">−5 %</button><button class="sec" type="button" data-d="10">−10 %</button></div>
+<p class="note" style="margin-top:0">Molts compradors proven d’oferir un 5–10 % menys que el preu anunciat. No és una regla ni està garantit que el venedor ho accepti.</p>
+<table id="cost1" class="z"></table>
+<div class="grid" style="margin-top:.7rem">
+<div><label for="not">Notaria (€)</label><input id="not" type="number" min="0"></div>
+<div><label for="reg">Registre (€)</label><input id="reg" type="number" min="0"></div>
+<div><label for="ges">Gestoria (€)</label><input id="ges" type="number" min="0"></div>
+<div><label for="tas">Tassació (€)</label><input id="tas" type="number" min="0"></div>
+</div>
+<p class="note">Deixa un camp buit per usar l’estimació («≈»); si saps l’import real, escriu-lo.</p>
+<h3>2. Ajudes</h3>
+<div class="grid">
+<div><label for="edat">Edat del comprador</label><input id="edat" type="number" value="30" min="18"></div>
+<div><label for="np">Persones que hi viuran</label><select id="np"><option value="1">1</option><option value="2">2</option></select></div>
+<div class="full"><label for="ing">Ingressos bruts anuals de la llar (€, opcional)</label><input id="ing" type="number" min="0"></div>
+</div>
+<div class="chk"><input id="prim" type="checkbox"><label for="prim" style="margin:0">Serà el meu primer habitatge i la residència habitual, i estic empadronat a Catalunya</label></div>
+<div class="chk" style="margin-top:.7rem"><input id="ajitp" type="checkbox"><label for="ajitp" style="margin:0"><b>ITP reduït del 5 % per a joves</b></label></div>
+<p class="note">Per a la compra d’habitatge habitual de segona mà. L’edat màxima i el límit de renda cal verificar-los a l’Agència Tributària de Catalunya.</p>
+<p class="elig" id="elig1"></p>
+<div class="chk"><input id="icf" type="checkbox"><label for="icf" style="margin:0"><b>Préstec Emancipació (ICF)</b></label></div>
+<p class="note">Préstec de la Generalitat de fins al 20 % del valor, màxim 50.000 €, sense interessos. Es comença a tornar quan acabes l’hipoteca (màxim 30 anys) i després tens 5 anys per retornar-lo. Cal cèdula d’habitabilitat vigent i que l’habitatge no sigui de protecció oficial. L’habitatge té restriccions (per exemple, no es pot llogar). Confirma-ho a l’ICF.</p>
+<p class="elig" id="elig2"></p>
+<h3>3. Finançament</h3>
+<div class="grid">
+<div><label for="ahe">Estalvi propi (€, de la teva butxaca)</label><input id="ahe" type="number" min="0"></div>
+<div><label for="ahp">Estalvi propi (% del cost total)</label><input id="ahp" type="number" value="30" min="0" max="100" step="0.5"></div>
+<div id="icfw" hidden><label for="icfv">Préstec Emancipació (€)</label><input id="icfv" type="number" min="0"></div>
+<div><label for="anys">Termini (anys)</label><input id="anys" type="number" value="30" min="1" max="40"></div>
+<div><label for="tipus_int">Tipus d’interès</label><select id="tipus_int"><option>Fix</option><option>Variable</option><option>Mixt</option></select></div>
+<div><label for="tin">Interès anual (%)</label><input id="tin" type="number" value="3" step="0.1" min="0"></div>
+<div><label for="nets">Ingressos nets mensuals de la llar (€)</label><input id="nets" type="number" min="0"></div>
+</div>
+<p class="note">Si canvies l’estalvi en € el percentatge s’actualitza, i a l’inrevés. L’estalvi propi cobreix primer impostos i despeses. El préstec Emancipació, si l’actives, surt per defecte pel màxim possible.</p>
+<table id="cost2"></table>
+<div class="warn" id="w2" hidden></div>
+<h3>4. Despeses mensuals</h3>
+<div class="grid">
+<div><label for="com">Comunitat (€/mes)</label><input id="com" type="number" min="0"></div>
+<div><label for="ibi">IBI (€/any)</label><input id="ibi" type="number" min="0"></div>
+<div><label for="esc">Escombraries (€/any)</label><input id="esc" type="number" min="0"></div>
+<div><label for="seg">Assegurança llar (€/any)</label><input id="seg" type="number" min="0"></div>
+<div><label for="sub">Subministraments (€/mes)</label><input id="sub" type="number" min="0"></div>
+</div>
+<p class="note">La comunitat s’omple sola si l’anunci la indica. L’IBI s’estima amb la mitjana del municipi (Idescat) quan està disponible. La resta de xifres «≈» són estimacions genèriques meves, no dades de l’immoble.</p>
+<table id="cost3"></table>
+<div class="warn">Els tipus fiscals i els requisits de les ajudes canvien sovint i les fonts consultades no coincideixen del tot. Comprova’ls a l’Agència Tributària de Catalunya i a l’ICF abans de decidir res.</div>
+</section>
+</div>
+
+<div>
+<section>
+<h2>Valoració de la compra</h2>
+<div class="big" id="sc">—</div><p id="scv" class="note">Omple preu, ingressos nets i adreça per obtenir la valoració.</p><table id="scf"></table>
+</section>
+<section style="margin-top:1.2rem">
+<h2>Preu per m²</h2>
+<div class="big" id="ppm">—</div>
+<p class="note" id="ppmn">Preu de l’anunci dividit per la superfície.</p>
+<h3>La zona en xifres</h3>
+<div id="zona"><p class="note">Escriu l’adreça i prem «Analitza» per veure les dades del municipi.</p></div>
+</section>
+<section style="margin-top:1.2rem">
+<h2>Entorn i urbanisme</h2>
+<div class="grid"><div><label for="radi">Radi d’entorn</label><select id="radi"><option value="100">100 m</option><option value="250">250 m</option><option value="500" selected>500 m</option><option value="1000">1.000 m</option></select></div></div>
+<div id="capes" class="note"></div>
+<div id="map" style="margin-top:.5rem"></div>
+<div id="fitxa" class="note">Clica el mapa per consultar la qualificació urbanística i les altres capes activades.</div>
+<table id="serv" style="margin-top:.7rem"></table>
+<h3>Inundabilitat (ACA)</h3><table id="flood"></table>
+<p class="note">Dades d’OpenStreetMap; poden estar incompletes. Inundabilitat, MUC i Natura 2000 vénen de serveis WMS de la Generalitat; els resultats són orientatius.</p>
+</section>
+</div>
+</main>
+<footer>Orientatiu: no és una taxació ni assessorament fiscal o financer. Mapa i serveis © col·laboradors d’<a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+/* Tipus fiscals: PENDENTS DE VERIFICAR. Edita aquí quan es confirmin. */
+const CFG={
+  itpTrams:[[0,.10],[600000,.11],[900000,.12],[1500000,.13]], // [des de €, tipus] progressiu
+  itpJove:.05, edatJove:35,
+  ajd:.015, ivaHab:.10, ivaAltres:.21,
+  icfPct:.2, icfMax:50000, icfEdat:40, icfRenda1:83392.53, icfRenda2:85971.60,
+  radi:600
+};
+const $=id=>document.getElementById(id);
+const eur=n=>new Intl.NumberFormat("ca-ES",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(n);
+const num=id=>parseFloat($(id).value)||0;
+let map,layer;
+
+function parseAd(){
+  const t=$("txt").value, u=$("url").value.trim();
+  if(u){const a=$("open");a.href=u;a.hidden=false;}
+  const g=(re)=>{const m=t.match(re);return m?m:null};
+  let m=g(/(\d{1,3}(?:[.\s]\d{3})+|\d{4,})\s*€/);
+  if(m)$("preu").value=m[1].replace(/[.\s]/g,"");
+  m=g(/(\d{2,4})\s*(?:m²|m2|metres)/i); if(m)$("m2").value=m[1];
+  m=g(/(\d+)\s*(?:hab|dorm|habitaci)/i); if(m)$("hab").value=m[1];
+  m=g(/(\d+)\s*(?:bany|baño)/i); if(m)$("banys").value=m[1];
+  if(/planta baixa|bajo|baixos|entresol/i.test(t))$("planta").value="Planta baixa";
+  else if(/(?:[5-9]|\d{2})\s*[ªa]?\s*planta|planta\s*(?:[5-9]|\d{2})|[áa]tico|[àa]tic/i.test(t))$("planta").value="Planta superior";
+  else if(/planta|\d\s*[ªa]\s*planta/i.test(t))$("planta").value="Planta intermèdia";
+  if(/sense ascensor|sin ascensor/i.test(t))$("asc").value="No";
+  else if(/ascensor/i.test(t))$("asc").value="Sí";
+  if(/obra nova|obra nueva|nova construcci/i.test(t))$("estat").value="nova";
+  if(/garatge|garaje|plaza de aparcamiento/i.test(t)&&!/pis|piso|casa/i.test(t))$("tipus").value="altres";
+  if(/terreny|terreno|parcel/i.test(t))$("tipus").value="terreny";
+  m=g(/(?:en venta en|a la venda a|en venda a)\s+([^\n]+)/i); if(m&&!$("adr").value)$("adr").value=m[1].trim();
+  m=t.match(/(?:gastos de comunidad|despeses de comunitat|comunidad|comunitat)[^\d\n]{0,25}(\d+(?:[.,]\d+)?)\s*€/i); if(m)$("com").value=m[1].replace(",",".");
+  m=t.match(/certificad[oa]?\s*energ[eéè]tic[oa]?|(?:qualificaci[oó]|calificaci[oó]n)\s*energ[eéè]tica/i);
+  if(m){const q=t.slice(m.index+m[0].length,m.index+m[0].length+40),L=q.match(/\b([A-G])\b/);
+    if(L)$("cert").value=L[1];else if(/tr[aà]mit|trámite/i.test(q))$("cert").value="En tràmit";else if(/exent|exempt/i.test(q))$("cert").value="Exempt";}
+  m=t.match(/(?:construid[oa]\s+en|constru[iï]t\s+(?:el|en)|any\s+de\s+construcci[oó]n?|año\s+de\s+construcci[oó]n)[^\d\n]{0,25}((?:18|19|20)\d{2})/i); if(m)$("any").value=m[1];
+  const yn=(id,re,no)=>{if(no.test(t))$(id).value="No";else if(re.test(t))$(id).value="Sí";};
+  yn("balc",/terraza|terrassa|balc[oó]n?\b/i,/(?:sin|sense)\s+(?:terraza|terrassa|balc[oó]n?)/i);
+  yn("ac",/aire acondicionado|aire condicionat/i,/(?:sin|sense)\s+aire/i);
+  yn("cal",/calefacci[oó]n?/i,/(?:sin|sense)\s+calefacci[oó]n?/i);
+  yn("gar",/garaje|garatge|parking|plaza de aparcamiento|plaça d[’']aparcament/i,/(?:sin|sense)\s+(?:garaje|garatge|parking)/i);
+  yn("tra",/trastero|traster/i,/(?:sin|sense)\s+trastero|traster/i);
+  if(/a reformar|para reformar|reforma integral/i.test(t))$("cons").value="A reformar";
+  else if(/obra nueva|obra nova|nova construcci/i.test(t))$("cons").value="Obra nova";
+  else if(/buen estado|bon estat|bien conservad/i.test(t))$("cons").value="Bon estat";
+  if(/nuda propiedad|nua propietat/i.test(t))$("sit").value="Nua propietat";
+  else if(/ocupad[oa]|ocupat|okupa/i.test(t))$("sit").value="Ocupat";
+  else if(/inquilin|arrendatari|alquilad[oa]|llogat/i.test(t))$("sit").value="Llogat (amb inquilins)";
+  else if(/\bbanco\b|entitat financera|sareb|servihabitat|solvia|altamira|aliseda/i.test(t))$("sit").value="De banc";
+  $("msg").textContent="Dades omplertes. Revisa-les i corregeix el que calgui.";
+  render();
+}
+
+function itp(preu){
+  let q=0;const t=CFG.itpTrams;
+  for(let i=0;i<t.length;i++){const lo=t[i][0],hi=i+1<t.length?t[i+1][0]:Infinity;
+    if(preu>lo)q+=(Math.min(preu,hi)-lo)*t[i][1];}
+  return q;
+}
+let last="p",offer=0,ibiAvg=0;
+const CERT={A:"Molt eficient: consums baixos.",B:"Molt eficient: consums baixos.",C:"Eficiència mitjana.",D:"Eficiència mitjana.",E:"Poc eficient: factures d’energia més altes i, de vegades, reformes d’aïllament.",F:"Poc eficient: factures d’energia més altes i, de vegades, reformes d’aïllament.",G:"Poc eficient: factures d’energia més altes i, de vegades, reformes d’aïllament.","En tràmit":"Encara no hi ha etiqueta: demana-la al venedor.",Exempt:"Immoble exempt de certificat."};
+const esc=x=>String(x).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const row=(a,b)=>`<tr><td>${a}</td><td>${b}</td></tr>`;
+const tot=(a,b)=>`<tr class="tot"><td>${a}</td><td>${b}</td></tr>`;
+const uv=(id,est)=>{const s=$(id).value.trim();return s===""?{v:est,e:1,est}:{v:parseFloat(s)||0,e:0,est}};
+const mark=o=>o.e?" (≈)":"";
+const chk=(ok,t)=>(ok===true?"✓ ":ok===false?"✗ ":"? ")+t;
+function cost(p,okItp){
+  const tipus=$("tipus").value,nova=$("estat").value==="nova";
+  let imp,etq;
+  if(nova){const iva=tipus==="habitatge"?CFG.ivaHab:CFG.ivaAltres;imp=p*(iva+CFG.ajd);etq=`IVA ${iva*100}% + AJD ${CFG.ajd*100}%`;}
+  else if(tipus==="habitatge"&&okItp){imp=p*CFG.itpJove;etq=`ITP reduït del ${CFG.itpJove*100}% (jove)`;}
+  else{imp=itp(p);etq=`ITP general (${p?(imp/p*100).toFixed(1):0}% de mitjana)`;}
+  const not=uv("not",Math.max(600,p*.0043)),reg=uv("reg",Math.max(300,p*.0022)),ges=uv("ges",300),tas=uv("tas",400);
+  return {imp,etq,not,reg,ges,tas,T:p+imp+not.v+reg.v+ges.v+tas.v};
+}
+function render(){
+  const p0=num("preu"),m2=num("m2"),tipus=$("tipus").value,nova=$("estat").value==="nova",W=[];
+  $("certn").textContent=CERT[$("cert").value]||"";
+  $("ppm").textContent=p0&&m2?eur(p0/m2)+"/m²":"—";
+  // ajudes
+  const ed=num("edat"),prim=$("prim").checked,hab=tipus==="habitatge",ing=num("ing");
+  const lim=$("np").value==="2"?CFG.icfRenda2:CFG.icfRenda1;
+  const e1=[ed>0&&ed<=CFG.edatJove,hab&&!nova,prim];
+  const e2=[ed>=18&&ed<=CFG.icfEdat,hab,prim,ing?ing<=lim:null];
+  $("elig1").textContent=[chk(e1[0],`Edat fins a ${CFG.edatJove} anys (pendent de verificar)`),chk(e1[1],"Habitatge de segona mà"),chk(e1[2],"Primer habitatge i habitual"),chk(null,"Límit de renda: consulta l’ATC")].join("\n");
+  $("elig2").textContent=[chk(e2[0],`Edat entre 18 i ${CFG.icfEdat} anys`),chk(e2[1],"Pis o casa"),chk(e2[2],"Primer habitatge, habitual i empadronat a Catalunya"),chk(e2[3],`Ingressos bruts fins a ${lim.toLocaleString("ca-ES",{minimumFractionDigits:2})} €`+(ing?"":" (indica’ls per comprovar-ho)"))].join("\n");
+  const okItp=$("ajitp").checked&&e1.every(x=>x);
+  const okIcf=$("icf").checked&&e2.every(x=>x!==false)&&e2[0]&&e2[1]&&e2[2];
+  if($("ajitp").checked&&!okItp)W.push("No es compleixen tots els requisits de l’ITP reduït: s’aplica el tipus general.");
+  if($("icf").checked&&!okIcf)W.push("No es compleixen tots els requisits del préstec Emancipació: no s’aplica.");
+  // termini
+  $("anys").max=$("icf").checked?30:40;
+  if($("icf").checked&&num("anys")>30){$("anys").value=30;W.push("Amb el préstec Emancipació el termini màxim de l’hipoteca és de 30 anys.");}
+  // costos
+  const pA=offer?p0*(1-offer/100):p0,c0=cost(p0,okItp),cA=offer?cost(pA,okItp):c0;
+  ["not","reg","ges","tas"].forEach(k=>$(k).placeholder="≈ "+Math.round(cA[k].est));
+  const R=[["Preu",p0,pA],[cA.etq,c0.imp,cA.imp],["Notaria"+mark(cA.not),c0.not.v,cA.not.v],["Registre"+mark(cA.reg),c0.reg.v,cA.reg.v],["Gestoria"+mark(cA.ges),c0.ges.v,cA.ges.v],["Tassació"+mark(cA.tas),c0.tas.v,cA.tas.v]];
+  const x3=(a,b,c,t)=>`<tr${t?' class="tot"':""}><td>${a}</td><td>${eur(b)}</td>${offer?`<td>${eur(c)}</td>`:""}</tr>`;
+  $("cost1").innerHTML=(offer?`<tr><th></th><th>Anunci</th><th>Oferta −${offer} %</th></tr>`:"")+R.map(r=>x3(...r)).join("")+x3("Cost total de l’immoble",c0.T,cA.T,1);
+  const T=cA.T;
+  // estalvi propi (bidireccional)
+  const aE=$("ahe"),aP=$("ahp");let own;
+  if(last==="p"){own=T*num("ahp")/100;if(document.activeElement!==aE)aE.value=Math.round(own);}
+  else{own=num("ahe");if(document.activeElement!==aP)aP.value=T?(own/T*100).toFixed(1):0;}
+  own=Math.min(own,T);
+  const icfMax=okIcf?Math.min(CFG.icfPct*pA,CFG.icfMax,Math.max(0,T-own)):0;
+  $("icfw").hidden=!$("icf").checked;$("icfv").placeholder="màx. "+Math.round(icfMax);
+  const iv=$("icfv").value.trim(),icf=okIcf?(iv===""?icfMax:Math.min(parseFloat(iv)||0,icfMax)):0;
+  const hip=Math.max(0,T-own-icf),ltv=pA?hip/pA:0;
+  const r=num("tin")/1200,n=Math.max(1,num("anys"))*12,f=r?r/(1-Math.pow(1+r,-n)):1/n,quota=hip*f;
+  let h=row("Cost total"+(offer?` (amb oferta −${offer} %)`:""),eur(T))+row("Estalvi propi (de la teva butxaca)",eur(own)+` (${T?(own/T*100).toFixed(1):0}% del cost)`);
+  if(icf)h+=row("Préstec Emancipació (0 % d’interès)",eur(icf)+` (${T?(icf/T*100).toFixed(1):0}% del cost)`);
+  h+=row("Hipoteca del banc",eur(hip)+` (${T?(hip/T*100).toFixed(0):0}% del cost)`)+tot(`Quota mensual (${$("tipus_int").value.toLowerCase()}, ${num("tin")}%, ${num("anys")} anys)`,eur(quota));
+  if(icf)h+=row("Quan acabis l’hipoteca: retorn del préstec",eur(icf/60)+"/mes durant 5 anys")+row("Interessos que t’estalvies (aprox.)",eur(icf*(f*n-1)));
+  $("cost2").innerHTML=h;
+  if(ltv>.8)W.push("El banc normalment no finança més del 80 % del valor de l’immoble: hauràs d’aportar més estalvi.");
+  if($("tipus_int").value!=="Fix")W.push("Amb tipus variable o mixt la quota pot canviar.");
+  $("w2").textContent=W.join(" ");$("w2").hidden=!W.length;
+  // mensuals
+  const com=uv("com",m2*($("asc").value==="Sí"?.9:.6)),ibi=uv("ibi",ibiAvg||pA*.003),esc2=uv("esc",150),seg=uv("seg",180),sub=uv("sub",130);
+  ["com","ibi","esc","seg","sub"].forEach((k,i)=>$(k).placeholder="≈ "+Math.round([com,ibi,esc2,seg,sub][i].est));
+  const men=com.v+(ibi.v+esc2.v+seg.v)/12+sub.v;
+  $("cost3").innerHTML=row("Quota d’hipoteca",eur(quota))+row("Comunitat"+mark(com),eur(com.v)+"/mes")+row("IBI"+(ibi.e?(ibiAvg?" (≈ mitjana del municipi)":" (≈)"):""),eur(ibi.v/12)+"/mes")+row("Escombraries"+mark(esc2),eur(esc2.v/12)+"/mes")+row("Assegurança de la llar"+mark(seg),eur(seg.v/12)+"/mes")+row("Subministraments"+mark(sub),eur(sub.v)+"/mes")+tot("Cost mensual total",eur(quota+men));
+  LAST={quota,men,pA,ltv};score();
+}
+/* Idescat: El municipi en xifres */
+const EM="https://api.idescat.cat/emex/v1/";
+let istV=null,LAST=null;
+const kn=x=>{x=x.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/’/g,"'").trim();const m=x.match(/^(.*),\s*(el|la|els|les|l')$/);if(m)x=m[1];return x.replace(/^(el|la|els|les)\s+/,"").replace(/^l'\s*/,"").replace(/[^a-z0-9]+/g," ").trim();};
+async function getTxt(url,k){try{const c=sessionStorage.getItem(k);if(c)return c;}catch(e){}
+  const r=await fetch(url);if(!r.ok)throw new Error(r.status);const t=await r.text();try{sessionStorage.setItem(k,t);}catch(e){}return t;}
+const fm=x=>x===undefined||x==="_"||x===""||isNaN(parseFloat(x))?"—":new Intl.NumberFormat("ca-ES",{maximumFractionDigits:1}).format(parseFloat(x));
+const kid=(t,q)=>[...t.children].find(c=>c.tagName===q)?.textContent.trim()||"";
+const lab=f=>(f.querySelector("calt")||f.querySelector("c")).textContent.trim();
+function fnd(dx,id){const f=dx.querySelector(`f[id="${id}"]`);if(!f)return null;const t=f.closest("t"),g=q=>(f.querySelector(q)?.textContent||"").trim();
+  return {c:lab(f),v:g("v").split(",").map(x=>x.trim()),u:g("u")||kid(t,"u"),r:g("r")||kid(t,"r"),l:kid(t,"l")};}
+function inRange(l,m){let x;if(x=l.match(/fins a (\d+)/i))return m<=+x[1];if(x=l.match(/(\d+)\s*(?:a|-|–)\s*(\d+)/))return m>=+x[1]&&m<=+x[2];if(x=l.match(/(\d+)\s*(?:m²|m2)?\s*(?:i m[eé]s|o m[eé]s|\+)|m[eé]s de (\d+)/i))return m>=+(x[1]||x[2]);return false;}
+function distTable(t,m2){
+  const rows=[...t.querySelectorAll("f")].map(f=>({c:lab(f),u:(f.querySelector("u")?.textContent||kid(t,"u")).trim(),v:f.querySelector("v").textContent.split(",").map(x=>parseFloat(x))}));
+  const tr=rows.find(r=>/^total/i.test(r.c)),body=rows.filter(r=>r!==tr);
+  let h=`<tr><td colspan="4"><b>${esc((t.querySelector("calt")||t.querySelector("c")).textContent.trim())}</b> <small>${esc(kid(t,"r"))}</small></td></tr>`;
+  if(body.length===1){const r=body[0];let d="";
+    if(m2&&/m²|m2/.test(r.u+r.c)&&r.v[0]){const p=(m2/r.v[0]-1)*100;d=` · el teu immoble: ${p>=0?"+":""}${p.toFixed(0)} %`;}
+    return h+`<tr><td>${esc(r.c)}${r.u?` (${esc(r.u)})`:""}<small>${esc(d)}</small></td>${[0,1,2].map(i=>`<td>${fm(String(r.v[i]))}</td>`).join("")}</tr>`;}
+  const tot=i=>tr?tr.v[i]:body.reduce((a,r)=>a+(r.v[i]||0),0);
+  return h+body.map(r=>`<tr><td>${m2&&inRange(r.c,m2)?"▶ ":""}${esc(r.c)}</td>${[0,1,2].map(i=>`<td>${isFinite(r.v[i])&&tot(i)?(r.v[i]/tot(i)*100).toFixed(1)+" %":"—"}</td>`).join("")}</tr>`).join("");
+}
+async function zona(name){
+  const box=$("zona");ibiAvg=0;istV=null;
+  if(!name){box.innerHTML='<p class="note">No s’ha pogut determinar el municipi.</p>';render();return;}
+  box.innerHTML='<p class="note">Carregant dades del municipi…</p>';
+  try{
+    const P=new DOMParser(),nx=P.parseFromString(await getTxt(EM+"nodes.xml?tipus=mun","idn"),"application/xml"),idx={};
+    nx.querySelectorAll("v").forEach(v=>{if(v.getAttribute("scheme")==="mun")idx[kn(v.textContent)]=v.getAttribute("id");});
+    const id=idx[kn(name)];
+    if(!id){box.innerHTML=`<p class="note">No trobem «${esc(name)}» a l’Idescat.</p>`;render();return;}
+    const dx=P.parseFromString(await getTxt(EM+"dades.xml?id="+id,"idd"+id),"application/xml");
+    const cols=[...dx.querySelectorAll("cols col")].map(c=>c.textContent.trim()),src=`https://www.idescat.cat/emex/?id=${id}&lang=ca`;
+    const lk=l=>l.startsWith("https://www.idescat.cat/")?l:src,m2=num("m2");
+    let t=`<table class="z"><tr><th></th>${cols.map(c=>`<th>${esc(c)}</th>`).join("")}</tr>`;
+    ["f171","f262","f385","f250","f398","f399"].forEach(k=>{const x=fnd(dx,k);if(!x)return;
+      t+=`<tr><td>${esc(x.c)}${x.u?` (${esc(x.u)})`:""}<br><small>${esc(x.r)} · <a href="${esc(lk(x.l))}" target="_blank" rel="noopener">font</a></small></td>${x.v.map(v=>`<td>${fm(v)}</td>`).join("")}</tr>`;});
+    const i385=fnd(dx,"f385");if(i385)istV=parseFloat(i385.v[0]);
+    const a=fnd(dx,"f198"),b=fnd(dx,"f200");
+    if(a&&b){const q=a.v.map((v,i)=>parseFloat(b.v[i])/parseFloat(v));if(isFinite(q[0]))ibiAvg=q[0];
+      t+=`<tr><td>IBI mitjà per rebut (€, calculat)<br><small>${esc(b.r)} · <a href="${esc(lk(b.l))}" target="_blank" rel="noopener">font</a></small></td>${q.map(v=>`<td>${isFinite(v)?fm(String(Math.round(v))):"—"}</td>`).join("")}</tr>`;}
+    const tabs=[...dx.querySelectorAll("t")].filter(x=>/superf[ií]cie [uú]til|tinen[cç]a/i.test(x.querySelector("c").textContent));
+    t+=tabs.map(x=>distTable(x,m2)).join("");
+    t+="</table>";
+    if(!tabs.length)t+='<p class="note">La superfície útil i el règim de tinença dels habitatges no consten a l’API de l’Idescat per a aquest municipi.</p>';
+    else t+='<p class="note">▶ marca el tram on cau la superfície de l’anunci (compara-la amb la superfície útil, no la construïda).</p>';
+    box.innerHTML=t+`<p class="note">Font: <a href="${src}" target="_blank" rel="noopener">Idescat, El municipi en xifres</a>. Dades oficials; no inclouen preus de l’habitatge.</p>`;
+  }catch(e){
+    box.innerHTML='<p class="note">No s’han pogut carregar les dades de l’Idescat des del navegador. Consulta’ls a <a href="https://www.idescat.cat/emex/?lang=ca" target="_blank" rel="noopener">El municipi en xifres</a>.</p>';
+  }
+  render();
+}
+function addImg(f){const u=URL.createObjectURL(f),a=document.createElement("a"),i=document.createElement("img");a.href=u;a.target="_blank";a.rel="noopener";i.src=u;i.alt=f.name||"Imatge";a.appendChild(i);$("gal").appendChild(a);}
+
+const CATS=[
+ {k:"Escoles i llars d’infants",c:"#c98a1b",t:x=>["school","kindergarten"].includes(x.amenity)},
+ {k:"Farmàcies",c:"#ffffff",t:x=>x.amenity==="pharmacy"},
+ {k:"Supermercats i botigues",c:"#d1495b",t:x=>["supermarket","convenience"].includes(x.shop)},
+ {k:"Transport públic",c:"#3d6fd1",t:x=>x.highway==="bus_stop"||["station","tram_stop","halt"].includes(x.railway)},
+ {k:"Sanitat",c:"#8a4fd1",t:x=>["clinic","hospital","doctors"].includes(x.amenity)},
+ {k:"Parcs",c:"#4c9a2a",t:x=>x.leisure==="park"}
+];
+const QR=2000;let pos=null,svc=null,flood=null,clk=null,svcLayer;
+function dist(a,b,c,d){const R=6371000,f=Math.PI/180,dl=(c-a)*f,dn=(d-b)*f;
+ const h=Math.sin(dl/2)**2+Math.cos(a*f)*Math.cos(c*f)*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(h));}
+/* Capes WMS de la Generalitat (adreces pendents de verificar) */
+const WU={PLANEJAMENT:"https://sig.gencat.cat/ows/PLANEJAMENT/wms",AIGUA:"https://sig.gencat.cat/ows/AIGUA/wms",ESPAIS_NATURALS:"https://sig.gencat.cat/ows/ESPAIS_NATURALS/wms"};
+const WL=[
+ {id:"MUC_QUALIFICACIONS",svc:"PLANEJAMENT",n:"Qualificacions del MUC",on:1},
+ {id:"MUC_PDERIVAT_QUALIFICACIO",svc:"PLANEJAMENT",n:"MUC derivat de qualificació"},
+ {id:"AIGUA_LI10",svc:"AIGUA",n:"Zones inundables T10"},
+ {id:"AIGUA_LI100",svc:"AIGUA",n:"Zones inundables T100"},
+ {id:"AIGUA_LI500",svc:"AIGUA",n:"Zones inundables T500"},
+ {id:"ESPAISNATURALS_XARNAT_2000",svc:"ESPAIS_NATURALS",n:"Xarxa Natura 2000"}];
+let wl={};
+const mkW=l=>L.tileLayer.wms(WU[l.svc],{layers:l.id,format:"image/png",transparent:true,version:"1.1.1",opacity:.6}).addTo(map);
+function gfi(l,ll){const m=L.CRS.EPSG3857.project(ll);
+ return WU[l.svc]+"?"+new URLSearchParams({SERVICE:"WMS",VERSION:"1.1.1",REQUEST:"GetFeatureInfo",LAYERS:l.id,QUERY_LAYERS:l.id,STYLES:"",SRS:"EPSG:3857",BBOX:[m.x-50,m.y-50,m.x+50,m.y+50].join(","),WIDTH:101,HEIGHT:101,X:50,Y:50,FEATURE_COUNT:5,INFO_FORMAT:"application/json"});}
+async function query(l,ll){
+  const u=gfi(l,ll);
+  try{const r=await fetch(u);if(!r.ok)throw 0;const t=await r.text();
+    try{return {u,f:(JSON.parse(t).features||[]).map(x=>x.properties||{})};}
+    catch(e){const b=new DOMParser().parseFromString(t,"text/html").body.textContent.trim();return {u,f:b?[{resposta:b.slice(0,600)}]:[]};}
+  }catch(e){return {u,err:1};}
+}
+function fitxaHtml(l,r){
+  const h=`<h3>${esc(l.n)}</h3>`;
+  if(r.err)return h+`<p class="note">No s’ha pogut consultar des del navegador. <a href="${esc(r.u)}" target="_blank" rel="noopener">Obre la consulta oficial</a>.</p>`;
+  if(!r.f.length)return h+'<p class="note">Cap element en aquest punt.</p>';
+  return h+r.f.map(p=>`<table>${Object.entries(p).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("")}</table>`).join("")+`<p class="note"><a href="${esc(r.u)}" target="_blank" rel="noopener">Consulta oficial</a> · servei WMS ${esc(l.svc)}, capa ${esc(l.id)}</p>`;
+}
+async function onClick(e){
+  const act=WL.filter(l=>wl[l.id]),box=$("fitxa");
+  if(!act.length){box.textContent="Activa alguna capa per consultar-la.";return;}
+  box.textContent="Consultant…";
+  if(clk)clk.remove();clk=L.circleMarker(e.latlng,{radius:6,color:"#d1495b"}).addTo(map);
+  const res=await Promise.all(act.map(l=>query(l,e.latlng)));
+  box.innerHTML=act.map((l,i)=>fitxaHtml(l,res[i])).join("")+'<p class="note">Camps tal com els retorna el servei oficial de la Generalitat. Els codis (per exemple R2 o A3) s’han de contrastar amb la llegenda i la normativa urbanística del municipi: no tenen un únic significat.</p>';
+}
+function initMap(){
+  map=L.map("map").setView([41.75,1.75],8);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(map);
+  layer=L.layerGroup().addTo(map);svcLayer=L.layerGroup().addTo(map);
+  $("capes").innerHTML=WL.map(l=>`<label style="display:inline-flex;gap:.3rem;margin:0 .8rem .2rem 0"><input type="checkbox" data-w="${l.id}"${l.on?" checked":""} style="width:auto"> ${esc(l.n)}</label>`).join("");
+  $("capes").addEventListener("change",e=>{const id=e.target.dataset.w,l=WL.find(x=>x.id===id);if(!l)return;
+    if(e.target.checked)wl[id]=mkW(l);else{map.removeLayer(wl[id]);delete wl[id];}});
+  WL.filter(l=>l.on).forEach(l=>wl[l.id]=mkW(l));
+  map.on("click",onClick);
+}
+async function queryFlood(ll){
+  flood=null;$("flood").innerHTML="";
+  const ls=WL.filter(l=>/AIGUA_LI/.test(l.id)),res=await Promise.all(ls.map(l=>query(l,ll)));
+  flood={};ls.forEach((l,i)=>flood[l.id.replace("AIGUA_LI","T")]=res[i].err?null:res[i].f.length>0);
+  const nm={T10:"cada 10 anys",T100:"cada 100 anys",T500:"cada 500 anys"};
+  $("flood").innerHTML=Object.keys(flood).map(k=>`<tr><td>Zona inundable ${k} (${nm[k]})</td><td>${flood[k]===null?"No disponible":flood[k]?"Dins la zona":"Fora de la zona"}</td></tr>`).join("");
+  score();
+}
+async function analyse(){
+  const q=$("adr").value.trim();
+  if(!q){$("msg").textContent="Escriu l’adreça o la població per veure l’entorn.";return;}
+  $("msg").textContent="Cercant l’adreça…";
+  try{
+    const r=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=es&addressdetails=1&accept-language=ca&q="+encodeURIComponent(q+", Catalunya"));
+    const j=await r.json();
+    if(!j.length){$("msg").textContent="No trobem aquesta adreça. Prova amb carrer i població.";return;}
+    const lat=+j[0].lat,lon=+j[0].lon,ad=j[0].address||{};pos=L.latLng(lat,lon);
+    zona(ad.city||ad.town||ad.village||ad.municipality||ad.hamlet||"");
+    layer.clearLayers();map.setView(pos,16);L.marker(pos).addTo(layer).bindPopup("Immoble");
+    queryFlood(pos);
+    $("msg").textContent="Carregant serveis del voltant…";
+    const a=`(around:${QR},${lat},${lon})`;
+    const body="data="+encodeURIComponent(`[out:json][timeout:25];(nwr${a}[amenity~"^(school|kindergarten|pharmacy|clinic|hospital|doctors)$"];nwr${a}[shop~"^(supermarket|convenience)$"];nwr${a}[highway=bus_stop];nwr${a}[railway~"^(station|tram_stop|halt)$"];nwr${a}[leisure=park];);out center tags;`);
+    const o=await fetch("https://overpass-api.de/api/interpreter",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body});
+    const d=await o.json();
+    svc=CATS.map(c=>({c,items:[]}));
+    d.elements.forEach(e=>{const y=e.lat??e.center?.lat,x=e.lon??e.center?.lon;if(y==null)return;
+      const tg=e.tags||{};svc.forEach(g=>{if(g.c.t(tg))g.items.push({d:dist(lat,lon,y,x),y,x,n:tg.name||g.c.k});});});
+    renderSvc();$("msg").textContent="Anàlisi feta.";
+  }catch(e){$("msg").textContent="No s’ha pogut carregar el mapa o els serveis. Torna-ho a provar d’aquí una estona.";}
+}
+function renderSvc(){
+  if(!svc||!pos)return;const R=+$("radi").value;svcLayer.clearLayers();
+  L.circle(pos,{radius:R,weight:1,dashArray:"4",fill:false}).addTo(svcLayer);
+  $("serv").innerHTML=svc.map(g=>{
+    g.items.sort((a,b)=>a.d-b.d);const ins=g.items.filter(i=>i.d<=R),n=ins.length,w=g.c.c==="#ffffff";
+    (n?ins:g.items.slice(0,1)).forEach(i=>L.circleMarker([i.y,i.x],{radius:5,color:w?"#444":g.c.c,weight:w?2:3,fillColor:g.c.c,fillOpacity:1}).addTo(svcLayer).bindPopup(`${esc(i.n)} · ${Math.round(i.d)} m`));
+    const near=g.items.length?Math.round(g.items[0].d):null;
+    const txt=near===null?`0 · cap en ${QR/1000} km`:`${n} · el més a prop a ${near} m`;
+    return `<tr><td><span class="dot" style="background:${g.c.c};border:1px solid #777"></span>${g.c.k}</td><td>${txt}</td></tr>`;}).join("");
+  score();
+}
+/* Valoració orientativa (0–10) */
+const cl=x=>Math.max(0,Math.min(1,x));
+function score(){
+  if(!LAST)return;const F=[],{quota,men,pA,ltv}=LAST,nets=num("nets");
+  if(nets>0&&pA){const r=(quota+men)/nets;F.push(["Esforç financer",3,cl((.5-r)/.25),`Hipoteca i despeses = ${(r*100).toFixed(0)}% dels ingressos nets (recomanable ≤ 35–40%)`]);}
+  if(pA)F.push(["Entrada i hipoteca",2,cl((1-ltv)/.3),`Hipoteca = ${(ltv*100).toFixed(0)}% del preu (el banc sol arribar al 80%)`]);
+  if(svc){const R=+$("radi").value,n=svc.filter(g=>g.items.some(i=>i.d<=R)).length;F.push(["Serveis a prop",2,n/svc.length,`${n} de ${svc.length} tipus de servei a ${R} m o menys`]);}
+  if(flood&&Object.values(flood).some(v=>v!==null)){const bad=flood.T10||flood.T100;F.push(["Inundabilitat",2,bad?0:flood.T500?.6:1,bad?"Dins una zona inundable T10 o T100":flood.T500?"Dins la zona T500":"Fora de les zones inundables consultades"]);}
+  const E={A:1,B:1,C:.8,D:.6,E:.4,F:.2,G:0}[$("cert").value];if(E!==undefined)F.push(["Eficiència energètica",1,E,"Certificat "+$("cert").value]);
+  const C={"Obra nova":1,"Bon estat":.8,"A reformar":.3}[$("cons").value];if(C!==undefined)F.push(["Conservació",1,C,$("cons").value+($("cons").value==="A reformar"?" (compta el cost de la reforma)":"")]);
+  const S={"Disponible (lliure)":1,"De banc":.8,"Llogat (amb inquilins)":.3,"Nua propietat":.2,"Ocupat":.1}[$("sit").value];if(S!==undefined)F.push(["Situació",2,S,$("sit").value+(S<.5?": pot no tenir-ne la possessió immediata; consulta un advocat":"")]);
+  const y=num("any");if(y>1000)F.push(["Antiguitat",.5,y<1950?.3:y<1980?.6:.9,"Construït el "+y]);
+  if(istV>0)F.push(["Zona (IST)",.5,cl((istV-80)/40),`Índex socioeconòmic ${fm(String(istV))} (Catalunya = 100)`]);
+  if(F.length<3){$("sc").textContent="—";$("scf").innerHTML="";$("scv").textContent="Omple preu, ingressos nets i adreça (i prem «Analitza») per obtenir la valoració.";return;}
+  const W=F.reduce((a,f)=>a+f[1],0),sc=F.reduce((a,f)=>a+f[1]*f[2],0)/W*10;
+  $("sc").textContent=sc.toFixed(1)+" / 10";
+  $("scv").textContent=(sc>=7.5?"Bona compra segons les dades disponibles.":sc>=5.5?"Compra raonable, amb punts a vigilar.":"Compra arriscada o difícil d’assumir segons les dades.")+" Indicador orientatiu amb regles simples: no inclou la comparació del preu amb el mercat ni és assessorament.";
+  $("scf").innerHTML=F.map(f=>`<tr><td>${f[2]>=.7?"✓":f[2]<.4?"✗":"~"} ${f[0]}</td><td>${f[3]}</td></tr>`).join("");
+}
+$("fill").onclick=parseAd;$("go").onclick=()=>{render();analyse();};
+$("ahe").addEventListener("input",()=>{last="e"});$("ahp").addEventListener("input",()=>{last="p"});
+document.querySelectorAll("input,select").forEach(e=>e.addEventListener("input",render));
+document.querySelectorAll("[data-d]").forEach(b=>b.onclick=()=>{offer=+b.dataset.d;render();});
+$("imgs").onchange=e=>[...e.target.files].forEach(addImg);
+document.addEventListener("paste",e=>[...(e.clipboardData?.files||[])].filter(f=>f.type.startsWith("image/")).forEach(addImg));
+$("radi").addEventListener("input",renderSvc);
+try{initMap();}catch(e){console.warn(e);}
+render();
+</script>
+</body>
+</html>
